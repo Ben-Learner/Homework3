@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from gan_pytorch import preprocess_img, deprocess_img, rel_error, count_params, ChunkSampler
 from gan_pytorch import Flatten, Unflatten, initialize_weights
-from gan_pytorch import discriminator
-from gan_pytorch import generator
-from gan_pytorch import bce_loss, discriminator_loss, generator_loss
+from gan_pytorch import discriminator, build_dc_classifier
+from gan_pytorch import generator, build_dc_generator
+from gan_pytorch import bce_loss, discriminator_loss, generator_loss, ls_discriminator_loss, ls_generator_loss
 from gan_pytorch import get_optimizer, run_a_gan
 from gan_pytorch import sample_noise
 
@@ -125,15 +125,47 @@ G = generator().type(dtype)
 D_solver = get_optimizer(D)
 G_solver = get_optimizer(G)
 
-# Run it!
-images = run_a_gan(
-    D,
-    G,
-    D_solver,
-    G_solver,
-    discriminator_loss,
-    generator_loss,
-    loader_train
-)
-for i in range(5, len(images),5):
-    show_images(images[i])
+if __name__ == "__main__":
+    GAN_type = 'DC_GAN'
+    # Run it!
+    if GAN_type == 'GAN':
+        images = run_a_gan(
+            D,
+            G,
+            D_solver,
+            G_solver,
+            discriminator_loss,
+            generator_loss,
+            loader_train
+        )
+
+    elif GAN_type == 'LS_GAN':
+        images = run_a_gan(
+            D,
+            G,
+            D_solver,
+            G_solver,
+            ls_discriminator_loss,
+            ls_generator_loss,
+            loader_train
+        )
+    elif GAN_type == 'DC_GAN':
+        D = build_dc_classifier(batch_size).type(dtype)
+        D.apply(initialize_weights)
+        G = build_dc_generator().type(dtype)
+        G.apply(initialize_weights)
+        D_solver = get_optimizer(D)
+        G_solver = get_optimizer(G)
+        images = run_a_gan(
+            D,
+            G,
+            D_solver,
+            G_solver,
+            discriminator_loss,
+            generator_loss,
+            loader_train
+        )
+    else:
+        raise Exception('wrong GAN type!')
+    for i in range(5, len(images),5):
+        show_images(images[i])

@@ -10,6 +10,7 @@ from torch.autograd import Variable
 import PIL
 NOISE_DIM = 96
 
+
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 
 def sample_noise(batch_size, dim, seed=None):
