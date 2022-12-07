@@ -6,9 +6,8 @@ import torchvision
 import torchvision.transforms as T
 import torch.optim as optim
 from torch.utils.data import sampler
-
+from torch.autograd import Variable
 import PIL
-
 NOISE_DIM = 96
 
 dtype = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
@@ -29,9 +28,9 @@ def sample_noise(batch_size, dim, seed=None):
         torch.manual_seed(seed)
     ##############################################################################
     # TODO: generate noise                                                       #
-    #                                                                            #
+    temp = torch.rand(batch_size, dim) + torch.rand(batch_size, dim) * (-1)
     ##############################################################################
-    pass
+    return temp
 
 def discriminator(seed=None):
     """
@@ -41,17 +40,20 @@ def discriminator(seed=None):
     if seed is not None:
         torch.manual_seed(seed)
 
-    model = None
-
     ##############################################################################
     # TODO: Implement architecture                                               #
-    #                                                                            #
+                                                                               #
     # HINT: nn.Sequential might be helpful. You'll start by calling Flatten().   #
     ##############################################################################
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
-
+    model = nn.Sequential(
+        Flatten(),
+        nn.Linear(784, 256),
+        nn.LeakyReLU(0.01, inplace=True),
+        nn.Linear(256, 256),
+        nn.LeakyReLU(0.01, inplace=True),
+        nn.Linear(256, 1)
+    )
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -66,15 +68,20 @@ def generator(noise_dim=NOISE_DIM, seed=None):
     if seed is not None:
         torch.manual_seed(seed)
 
-    model = None
+
 
     ##############################################################################
     # TODO: Implement architecture                                               #
-    #                                                                            #
+    model = nn.Sequential(
+        nn.Linear(noise_dim, 1024),
+        nn.ReLU(inplace=True),
+        nn.Linear(1024, 1024),
+        nn.ReLU(inplace=True),
+        nn.Linear(1024, 784),
+        nn.Tanh()
+    )                                                                        #
     # HINT: nn.Sequential might be helpful.                                      #
     ##############################################################################
-    
-    pass
     return model
 
 def bce_loss(input, target):
@@ -89,7 +96,7 @@ def bce_loss(input, target):
     - A PyTorch Tensor containing the mean BCE loss over the minibatch of input data.
     """
     bce = nn.BCEWithLogitsLoss()
-    return bce(input.squeeze(), target)
+    return bce(input, target)
 
 def discriminator_loss(logits_real, logits_fake):
     """
@@ -105,7 +112,20 @@ def discriminator_loss(logits_real, logits_fake):
     loss = None
     ##############################################################################
     # TODO:                                                                      #
-    #                                                                            #
+    # batch_size
+    N = logits_real.size()
+
+    #target label, all is 1 which means the correct identify  for real and fake sample
+    true_labels = Variable(torch.ones(N)).type(dtype)
+
+    #loss omputation for real
+    real_image_loss = bce_loss(logits_real, true_labels)
+
+    #loss comoutation for fake
+    fake_image_loss = bce_loss(logits_fake, 1 - true_labels)
+
+    #total loss
+    loss = real_image_loss + fake_image_loss
     ##############################################################################
     return loss
 
@@ -122,7 +142,13 @@ def generator_loss(logits_fake):
     loss = None
     ##############################################################################
     # TODO:                                                                      #
-    #                                                                            #
+    # Batch size
+    N = logits_fake.size()
+
+    # labels
+    true_labels = Variable(torch.ones(N)).type(dtype)
+    # loss computation for fake
+    loss = bce_loss(logits_fake, true_labels)
     ##############################################################################
     return loss
 
@@ -139,8 +165,7 @@ def get_optimizer(model):
     """
     optimizer = None
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    optimizer = optim.Adam(model.parameters(), lr=0.001, betas = (0.5, 0.999))
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     return optimizer
@@ -158,8 +183,8 @@ def ls_discriminator_loss(scores_real, scores_fake):
     """
     loss = None
     ##############################################################################
-    # TODO:                                                                      #
-    #                                                                            #
+    # TODO:
+    loss = 0.5 * ((scores_real - 1) ** 2).mean() + 0.5 * (scores_fake ** 2).mean()
     ##############################################################################
     return loss
 
@@ -175,8 +200,7 @@ def ls_generator_loss(scores_fake):
     """
     loss = None
     # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-
-    pass
+    loss = 0.5 * ((scores_fake - 1) ** 2).mean()
 
     # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
     return loss
@@ -187,11 +211,23 @@ def build_dc_classifier(batch_size):
     the architecture above.
     """
     ##############################################################################
-    # TODO: Implement architecture                                               #
-    #                                                                            #
+    # TODO: Implement architecture
+    model = nn.Sequential(
+        Unflatten(batch_size, 1, 28, 28),
+        nn.Conv2d(1, 32, 5),
+        nn.LeakyReLU(),
+        nn.MaxPool2d(2),
+        nn.Conv2d(32, 64, 5),
+        nn.LeakyReLU(),
+        nn.MaxPool2d(2),
+        Flatten(),
+        nn.Linear(4*4*64, 4*4*64),
+        nn.LeakyReLU(),
+        nn.Linear(4*4*64, 1)
+    )
     # HINT: nn.Sequential might be helpful.                                      #
     ##############################################################################
-    pass
+    return model
 
 
 def build_dc_generator(noise_dim=NOISE_DIM):
@@ -202,11 +238,25 @@ def build_dc_generator(noise_dim=NOISE_DIM):
 
     ##############################################################################
     # TODO: Implement architecture                                               #
-    #                                                                            #
+    model = nn.Sequential(
+        nn.Linear(noise_dim, 1024),
+        nn.ReLU(),
+        nn.BatchNorm1d(1024),
+        nn.Linear(1024, 7*7*128),
+        nn.ReLU(),
+        nn.BatchNorm1d(7*7*128),
+        Unflatten(-1, 128, 7, 7),
+        nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1), #deconvolution
+        nn.ReLU(),
+        nn.BatchNorm2d(64),
+        nn.ConvTranspose2d(64, 1, 4, stride=2, padding=1),
+        nn.Tanh(),
+        Flatten()
+    )                                                                           #
     # HINT: nn.Sequential might be helpful.                                      #
     ##############################################################################
 
-    pass
+    return model
 
 
 
@@ -257,7 +307,6 @@ def run_a_gan(D, G, D_solver, G_solver, discriminator_loss, generator_loss, load
                 print('Iter: {}, D: {:.4}, G:{:.4}'.format(iter_count,d_total_error.item(),g_error.item()))
                 imgs_numpy = fake_images.data.cpu().numpy()
                 images.append(imgs_numpy[0:16])
-
             iter_count += 1
 
     return images

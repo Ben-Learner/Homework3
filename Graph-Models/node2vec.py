@@ -46,10 +46,6 @@ def test():
     return acc
 
 
-for epoch in range(1, 101):
-    loss = train()
-    acc = test()
-    print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Acc: {acc:.4f}')
 
 
 @torch.no_grad()
@@ -65,9 +61,13 @@ def visualize(color_list):
     plt.axis('off')
     plt.savefig('visualization.png')
 
-
-color_list = [
-    '#ffc0cb', '#bada55', '#008080', '#420420', '#7fe5f0', '#065535',
-    '#ffd700'
-]
-visualize(color_list)
+if __name__ == '__main__':
+    for epoch in range(1, 101):
+        loss = train()
+        acc = test()
+        print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}, Acc: {acc:.4f}')
+    color_list = [
+        '#ffc0cb', '#bada55', '#008080', '#420420', '#7fe5f0', '#065535',
+        '#ffd700'
+    ]
+    visualize(color_list)
